@@ -11,6 +11,13 @@
   <body>
     <button class="theme-toggle" id="themeToggle" type="button">🌙 다크</button>
 
+    <nav class="tabbar">
+      <a href="index.html" aria-current="page"><span class="icon">🏠</span>Home</a>
+      <a href="list.html"><span class="icon">🔍</span>Search</a>
+      <a href="list.html?filter=rating"><span class="icon">⭐</span>Favorites</a>
+      <a href="detail.html?id=brew-haven"><span class="icon">👤</span>Profile</a>
+    </nav>
+
     <main class="wrap">
       <h1 class="page-title">Coffee Shops</h1>
       <p class="page-sub">처음 온 동네에서 분위기 좋은 카페를 3분 안에 찾습니다.</p>
@@ -47,12 +54,6 @@
       <ul class="card-list" id="nearbyList"></ul>
     </main>
 
-    <nav class="tabbar">
-      <a href="index.html" aria-current="page"><span class="icon">🏠</span>Home</a>
-      <a href="list.html"><span class="icon">🔍</span>Search</a>
-      <a href="list.html?filter=rating"><span class="icon">⭐</span>Favorites</a>
-      <a href="detail.html?id=brew-haven"><span class="icon">👤</span>Profile</a>
-    </nav>
 
     <script src="js/data.js"></script>
     <script src="js/app.js"></script>
@@ -65,6 +66,7 @@
       initSearchForm();
       initAiCuration();
       initTheme();
+      initTracking();
     </script>
   </body>
 </html>

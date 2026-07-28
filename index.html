@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- 반응형의 출발점. 이 한 줄이 없으면 모바일 브라우저가 데스크톱 폭(980px)으로 그린 뒤
+         축소해 버려서, CSS 미디어 쿼리를 아무리 써도 글자가 작게 보입니다. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BrewFinder — 3분 안에 카페 찾기</title>
+    <link rel="stylesheet" href="css/style.css" />
+  </head>
+  <body>
+    <button class="theme-toggle" id="themeToggle" type="button">🌙 다크</button>
+
+    <main class="wrap">
+      <h1 class="page-title">Coffee Shops</h1>
+      <p class="page-sub">처음 온 동네에서 분위기 좋은 카페를 3분 안에 찾습니다.</p>
+
+      <!-- 발견 단계: 능동 탐색(검색) 을 최상단에 둔다 — B2-1 정보 구조 근거 -->
+      <form class="searchbar" id="searchForm">
+        <input
+          id="searchInput"
+          type="search"
+          placeholder="카페 이름이나 분위기로 검색"
+          aria-label="카페 검색"
+        />
+        <button class="btn" type="submit">검색</button>
+      </form>
+
+      <div class="map-preview">📍 현재 위치 주변 · 지도 프리뷰</div>
+
+      <!-- AI 기능: 취향 문장을 받아 카페를 골라 주는 큐레이션 -->
+      <section class="ai-panel">
+        <h2 class="section-title" style="margin-top: 0">AI 카페 큐레이션</h2>
+        <p class="muted">
+          오늘 원하는 분위기를 문장으로 적어 주세요. 예) “노트북 켜고 두 시간 조용히 있고 싶어요”
+        </p>
+        <form class="searchbar" id="aiForm">
+          <input id="aiInput" type="text" placeholder="원하는 분위기를 적어 주세요" aria-label="취향 입력" />
+          <button class="btn" id="aiSubmit" type="submit">추천받기</button>
+        </form>
+        <div class="ai-output" id="aiOutput" role="status" aria-live="polite">
+          아직 추천을 요청하지 않았습니다.
+        </div>
+      </section>
+
+      <h2 class="section-title">Nearby Cafes</h2>
+      <ul class="card-list" id="nearbyList"></ul>
+    </main>
+
+    <nav class="tabbar">
+      <a href="index.html" aria-current="page"><span class="icon">🏠</span>Home</a>
+      <a href="list.html"><span class="icon">🔍</span>Search</a>
+      <a href="list.html?filter=rating"><span class="icon">⭐</span>Favorites</a>
+      <a href="detail.html?id=brew-haven"><span class="icon">👤</span>Profile</a>
+    </nav>
+
+    <script src="js/data.js"></script>
+    <script src="js/app.js"></script>
+    <script>
+      // 메인은 "가까운 순 3곳"만 보여 준다 — 발견 단계의 인지 부하를 좁힌다.
+      renderCards(
+        'nearbyList',
+        [...CAFES].sort((a, b) => a.distanceKm - b.distanceKm).slice(0, 3)
+      );
+      initSearchForm();
+      initAiCuration();
+      initTheme();
+    </script>
+  </body>
+</html>

@@ -89,6 +89,7 @@ vercel dev
 | 이름 | 어디에 설정하나 | 비고 |
 |---|---|---|
 | `OPENAI_API_KEY` | 로컬은 `.env.local`, 배포는 Vercel 프로젝트 Settings → Environment Variables | **서버에서만** 읽습니다. 브라우저 번들에 들어가지 않습니다 |
+| `TRACK_WEBHOOK_URL` | 위와 같음 (선택) | 사용 이벤트를 외부 도구로 보낼 때만. 없으면 로그만 남깁니다 |
 
 ---
 
@@ -105,7 +106,9 @@ codyssey-a1-3/
 │   ├── data.js         카페 데이터(B2-1 시안 계승)
 │   └── app.js          렌더·검색·필터·fetch·오류 처리·테마
 ├── api/
-│   └── recommend.py    Vercel Serverless Function (POST /api/recommend)
+│   ├── recommend.py    Vercel Serverless Function (POST /api/recommend) — AI 큐레이션
+│   └── track.py        Vercel Serverless Function (POST /api/track) — 사용 이벤트 수집
+├── images/             화면 스크린샷(모바일·데스크톱·다크) — 자동 캡처
 ├── requirements.txt    Python 런타임 선택 + 패키지 목록(현재 표준 라이브러리만)
 ├── vercel.json         함수 런타임·최대 실행 시간
 ├── .env.example        키 형식만 공유(값은 자리표시자)
@@ -148,6 +151,47 @@ codyssey-a1-3/
 ④ {"recommendation": "..."} 로 응답 (실패면 {"error": "..."} + 상태코드)
    ↓
 ⑤ app.js 가 응답을 읽어 화면의 .ai-output 에 문장을 넣는다
+```
+
+③ 단계에서 서버가 실제로 AI 를 부르는 코드입니다. 프롬프트에 **고를 수 있는 카페 목록**을 함께
+넣어 목록 밖 추천을 막습니다 — 없는 가게를 지어내면 서비스가 거짓말을 하게 됩니다.
+
+```python
+def call_openai(api_key: str, prompt: str) -> str:
+    """OpenAI Chat Completions 호출 → 답변 텍스트. 실패는 예외로 올린다."""
+    body = json.dumps(
+        {
+            "model": MODEL,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.7,
+            "max_tokens": 400,  # 응답 길이를 묶어 요금과 대기시간을 예측 가능하게 만든다
+        }
+    ).encode("utf-8")
+    request = urllib.request.Request(
+        OPENAI_URL,
+        data=body,
+        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=UPSTREAM_TIMEOUT) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+    return payload["choices"][0]["message"]["content"].strip()
+```
+
+⑤ 단계에서 응답을 화면에 넣는 코드입니다. 성공과 실패가 **같은 함수**를 쓰되 `is-error`
+클래스로만 갈립니다 — 표시 위치가 두 군데로 갈리면 "성공 문구 아래 실패 문구가 남는" 상태가
+생깁니다.
+
+```javascript
+  const show = (message, isError) => {
+    output.textContent = message;
+    output.classList.toggle('is-error', Boolean(isError));
+  };
+
+  // …요청이 성공했을 때
+      const data = await response.json();
+      show(data.recommendation || '추천 문구가 비어 있습니다. 다시 시도해 주세요.');
+      track('ai_success');
 ```
 
 핵심은 **브라우저가 AI API 를 직접 부르지 않는다**는 점입니다. 우리 서버(`/api/recommend`)를
@@ -279,6 +323,27 @@ function httpMessage(status) {
 
 ---
 
+## 화면 스크린샷
+
+`images/` 에 실제 렌더링 결과를 넣어 두었습니다. 손으로 찍은 것이 아니라 headless 브라우저로
+두 폭에서 자동 캡처한 것이라, 코드를 고치면 같은 방법으로 다시 뽑을 수 있습니다.
+
+| 화면 | 모바일 390×844 | 데스크톱 1280×900 |
+|---|---|---|
+| 메인(발견) | ![메인 모바일](images/01_main_mobile.png) | ![메인 데스크톱](images/01_main_desktop.png) |
+| 목록(비교) | ![목록 모바일](images/02_list_mobile.png) | ![목록 데스크톱](images/02_list_desktop.png) |
+| 상세(결정) | ![상세 모바일](images/03_detail_mobile.png) | ![상세 데스크톱](images/03_detail_desktop.png) |
+
+다크 모드(보너스): ![다크 모드](images/04_dark_mobile.png)
+
+**캡처가 실제로 버그를 잡았습니다.** 첫 촬영에서 데스크톱 화면의 가로 메뉴가 콘텐츠
+**아래**에 있었습니다 — `<nav>` 를 문서 끝에 두었기 때문에 `position: static` 이 되는 순간
+아래로 내려간 것입니다. 모바일에서는 `position: fixed` 라 위치가 드러나지 않아 눈치채지
+못했습니다. `<nav>` 를 `<main>` 앞으로 옮겨 고쳤습니다(고정 배치는 문서 순서와 무관하므로
+모바일 화면은 그대로입니다).
+
+---
+
 ## 반응형 — 두 가지 화면 크기에서 확인
 
 | 폭 | 무엇이 달라지나 |
@@ -342,6 +407,36 @@ function httpMessage(status) {
 
 읽는 법: 400 은 **요청을 고치면 되는** 문제(사용자·프론트), 500 은 **서버 설정** 문제입니다.
 경계를 이렇게 나눠야 화면의 안내 문구가 "무엇을 하라"로 정확해집니다.
+
+수집 엔드포인트(`api/track.py`)도 같은 방식으로 확인했습니다.
+
+```text
+== GET 수집 설정 상태 ==
+{"status": "ok", "webhook": false, "events": ["ai_error", "ai_request", "ai_success",
+ "cafe_open", "page_view", "reserve_click", "theme_toggle"]}
+
+== POST 정상 이벤트 ==
+{"track": {"event": "ai_request", "path": "/index.html", "detail": {"length": 18}}}   ← 서버 로그
+{"ok": true, "forward": "skipped(no-webhook)"} [HTTP 200]
+
+== POST 허용목록 밖(오타) ==
+{"error": "알 수 없는 이벤트: ai_requst"} [HTTP 400]
+```
+
+세 번째 줄이 허용 목록의 값어치입니다 — `ai_requst` 라는 오타가 조용히 새 지표로 쌓이지
+않고 그 자리에서 거부됩니다.
+
+반응형 확인도 자동화했습니다. 두 폭에서 세 페이지를 열어 캡처한 결과입니다.
+
+```text
+01_main_mobile.png    390x844
+02_list_mobile.png    390x844
+03_detail_mobile.png  390x844
+04_dark_mobile.png    390x844 (dark)
+01_main_desktop.png   1280x900
+02_list_desktop.png   1280x900
+03_detail_desktop.png 1280x900
+```
 
 ---
 
@@ -440,21 +535,64 @@ body.dark {
   });
 ```
 
-### 2. 개선 효과를 확인하는 방법
+### 2. 사용 이벤트 수집 + 외부 도구 연동 (`api/track.py`)
 
-기능을 넣는 것과 **효과를 확인하는 것**은 별개입니다. 지금 구조에서 무엇을 볼 수 있는지와,
-무엇을 더하면 볼 수 있는지를 정리했습니다.
+기능을 넣는 것과 **그 기능이 쓰이는지 아는 것**은 별개입니다. 두 번째 엔드포인트를 만들어
+행동을 기록합니다.
 
-| 알고 싶은 것 | 지금 볼 수 있나 | 어떻게 측정하나 |
+| 알고 싶은 것 | 어떻게 재나 | 필요한 이벤트 |
 |---|---|---|
-| 다크 모드를 쓰는 사람 비율 | 부분적으로 — `localStorage` 값 | 토글 클릭 시 이벤트 전송(방문자 분석 도구) |
-| AI 추천이 실제로 쓰이는가 | 아니오 | `/api/recommend` 호출 수 ÷ 방문 수 |
-| 추천이 **도움이 됐는가** | 아니오 | 추천 뒤 상세 페이지 진입률, "예약" 클릭률 |
-| 타임아웃이 잦은가 | 아니오 | 프론트에서 `AbortError` 발생 건수 집계 |
+| 다크 모드를 쓰는 사람 비율 | 토글 수 ÷ 방문 수 | `theme_toggle` ÷ `page_view` |
+| AI 추천이 실제로 쓰이는가 | 요청 수 ÷ 방문 수 | `ai_request` ÷ `page_view` |
+| 추천이 **도움이 됐는가** | 추천 성공 뒤 상세 진입·예약 비율 | `cafe_open`·`reserve_click` ÷ `ai_success` |
+| 어떤 실패가 잦은가 | 사유별 집계 | `ai_error` 의 `reason`(`empty_input`·`timeout`·`http_429`…) |
 
 세 번째 줄이 핵심입니다. "AI 기능을 몇 번 눌렀나"는 **호기심**을 재고, "추천받은 곳으로
-들어갔나"는 **유용함**을 잽니다. 붙일 자리도 정해져 있습니다 — `initAiCuration()` 의
-`show(...)` 직후에 이벤트 한 줄을 보내면 됩니다.
+들어갔나"는 **유용함**을 잽니다.
+
+**입력 → 처리 → 저장/알림** 흐름은 이렇게 이어집니다.
+
+```text
+[사용자 행동]  다크 토글 · 추천 요청 · 카드 클릭 · 예약
+   ↓  js/app.js  track(event, detail)      기다리지 않는다(await 없음)
+[서버]  api/track.py  handler.do_POST()
+   ├─ 허용 목록 검사 — 오타가 새 지표를 만들지 못하게 한다
+   ├─ ① 구조화 로그 한 줄(JSON) → Vercel 함수 로그가 곧 조회 가능한 저장소
+   └─ ② TRACK_WEBHOOK_URL 이 있으면 같은 이벤트를 외부 도구로 전달
+        (Slack · Make/Zapier 같은 노코드 자동화 · 시트 적재 — URL 만 바꾸면 붙는다)
+```
+
+이벤트 이름을 **허용 목록으로 묶은** 이유: 아무 문자열이나 받으면 오타 하나가 새 지표를
+만들고, 나중에 같은 행동이 두 이름으로 갈려 집계가 틀립니다.
+
+```python
+ALLOWED_EVENTS = {
+    "page_view", "theme_toggle", "ai_request", "ai_success",
+    "ai_error", "cafe_open", "reserve_click",
+}
+```
+
+수집이 **서비스를 망가뜨리지 않게** 두 겹으로 막았습니다. 프론트는 `await` 하지 않고 실패를
+삼키며, 서버는 웹훅이 죽어도 200 을 돌려줍니다(사유는 로그에 남깁니다).
+
+```python
+    try:
+        with urllib.request.urlopen(request, timeout=WEBHOOK_TIMEOUT) as response:
+            return f"forwarded({response.status})"
+    except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as exc:
+        # 수집 실패가 서비스 실패가 되면 안 된다 — 사유만 남기고 넘어간다
+        return f"forward-failed({exc})"
+```
+
+**개인정보는 보내지 않습니다.** 사용자가 쓴 취향 문장은 추천에는 쓰지만 기록에는 남기지
+않고, 대신 **길이만** 보냅니다(문장이 짧아서 추천이 부실한지 볼 수 있으면 충분합니다).
+
+```javascript
+    track('ai_request', { length: wish.length }); // 문장 자체가 아니라 길이만 남긴다
+```
+
+> `TRACK_WEBHOOK_URL` 은 **실제 연동 시 이 자리**에 넣습니다. 값이 없으면 로그만 남기고
+> 웹훅 단계는 건너뜁니다(`"forward": "skipped(no-webhook)"`).
 
 ---
 

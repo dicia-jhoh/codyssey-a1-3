@@ -12,6 +12,30 @@
 /** 응답을 기다릴 최대 시간(밀리초). 이 시간을 넘기면 사용자에게 안내하고 요청을 끊습니다. */
 const REQUEST_TIMEOUT_MS = 12000;
 
+/* ── 사용 이벤트 수집(보너스) ────────────────────────────────── */
+
+/**
+ * 행동 하나를 서버(`/api/track`)로 보냅니다.
+ *
+ * 세 가지를 지킵니다.
+ *  ① **기다리지 않는다** — await 하지 않으므로 화면 동작이 수집 때문에 느려지지 않습니다.
+ *  ② **실패를 삼킨다** — 수집이 끊겨도 사용자에게는 아무 일도 일어나지 않아야 합니다.
+ *  ③ **개인정보를 보내지 않는다** — 이벤트 이름·경로·카페 id 만 보냅니다.
+ *     사용자가 입력한 취향 문장은 **보내지 않습니다**(추천에는 쓰지만 기록에는 남기지 않습니다).
+ */
+function track(event, detail) {
+  try {
+    fetch('/api/track', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event, path: location.pathname, detail: detail || {} }),
+      keepalive: true, // 페이지를 떠나는 중에도 전송이 끊기지 않게 한다
+    }).catch(() => {});
+  } catch (_) {
+    /* 수집 실패는 서비스 실패가 아니다 */
+  }
+}
+
 /* ── 화면 그리기 ─────────────────────────────────────────────── */
 
 /**
@@ -58,6 +82,7 @@ function renderCards(targetId, cafes) {
     meta.textContent = `★ ${cafe.rating}\n${formatDistance(cafe.distanceKm)}`;
     meta.style.whiteSpace = 'pre-line';
 
+    link.addEventListener('click', () => track('cafe_open', { id: cafe.id }));
     link.append(thumb, body, meta);
     item.appendChild(link);
     list.appendChild(item);
@@ -141,6 +166,7 @@ function renderDetail(id) {
     reserve.addEventListener('click', () => {
       reserve.textContent = `${cafe.name} 예약 요청됨 (데모)`;
       reserve.disabled = true;
+      track('reserve_click', { id: cafe.id });
     });
   }
 }
@@ -232,11 +258,13 @@ function initAiCuration() {
     if (!wish) {
       show('원하는 분위기를 한 문장이라도 적어 주세요. 예) 조용히 작업할 곳', true);
       input.focus();
+      track('ai_error', { reason: 'empty_input' });
       return;
     }
 
     submit.disabled = true;
     show('추천을 만드는 중입니다… (최대 12초)');
+    track('ai_request', { length: wish.length }); // 문장 자체가 아니라 길이만 남긴다
 
     // ③ 지연·타임아웃 — 정해진 시간이 지나면 요청 자체를 취소한다
     const controller = new AbortController();
@@ -253,16 +281,20 @@ function initAiCuration() {
       // ② API 오류 — 상태코드별로 사용자가 할 일이 다르다
       if (!response.ok) {
         show(httpMessage(response.status), true);
+        track('ai_error', { reason: `http_${response.status}` });
         return;
       }
 
       const data = await response.json();
       show(data.recommendation || '추천 문구가 비어 있습니다. 다시 시도해 주세요.');
+      track('ai_success');
     } catch (error) {
       if (error.name === 'AbortError') {
         show('응답이 12초를 넘겨 요청을 취소했습니다. 잠시 후 다시 시도해 주세요.', true);
+        track('ai_error', { reason: 'timeout' });
       } else {
         show('네트워크에 연결할 수 없습니다. 연결 상태를 확인한 뒤 다시 시도해 주세요.', true);
+        track('ai_error', { reason: 'network' });
       }
     } finally {
       clearTimeout(timer); // 성공·실패 어느 쪽이든 타이머를 반드시 정리한다
@@ -314,5 +346,16 @@ function initTheme() {
     const next = !document.body.classList.contains('dark');
     localStorage.setItem('brewfinder-theme', next ? 'dark' : 'light');
     apply(next);
+    track('theme_toggle', { to: next ? 'dark' : 'light' });
   });
+}
+
+/**
+ * 페이지 열람을 한 번 기록합니다(보너스).
+ *
+ * 페이지마다 호출하는 이유: 방문 대비 AI 요청 비율(= 기능이 실제로 쓰이는가)을 내려면
+ * 분모가 필요합니다. 이벤트 수만 세면 "많이 눌렸다"는 알아도 "몇 명 중 몇 명인지"는 모릅니다.
+ */
+function initTracking() {
+  track('page_view');
 }

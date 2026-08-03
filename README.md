@@ -1,5 +1,9 @@
 # BrewFinder — AI 카페 큐레이션 웹 서비스 (A1-3)
 
+**배포 URL — https://dicia-jhoh.github.io/codyssey-a1-3/**
+(메인 → 목록 → 상세 3개 화면과 상단 메뉴 이동이 이 주소에서 모두 동작합니다.
+AI 큐레이션은 서버리스 런타임이 필요해 이 정적 배포에서는 안내 메시지가 뜹니다 — 아래 [배포](#배포) 참조.)
+
 처음 온 동네에서 **분위기 좋은 카페를 3분 안에 찾아 예약**하는 웹 서비스입니다.
 순수 HTML/CSS/JavaScript 로 만든 화면 3개와, Vercel Serverless Functions(Python) 로 만든
 AI 추천 엔드포인트 하나로 이루어져 있습니다.
@@ -9,7 +13,7 @@ AI 추천 엔드포인트 하나로 이루어져 있습니다.
 | 프론트엔드 | 순수 HTML · CSS · JavaScript (프레임워크 없음) |
 | 백엔드 | Vercel Serverless Functions — Python (`api/recommend.py`) |
 | AI 기능 | 취향 문장 → 카페 큐레이션 (OpenAI Chat Completions) |
-| 배포 | GitHub ↔ Vercel 연동 (아래 [배포](#배포--github--vercel) 참조) |
+| 배포 | GitHub Pages(정적, 운영 URL) + Vercel(서버리스 함수) — 아래 [배포](#배포) 참조 |
 | 환경 변수 | `OPENAI_API_KEY` (서버 전용 — 브라우저에 내려가지 않음) |
 
 ---
@@ -258,7 +262,7 @@ class handler(BaseHTTPRequestHandler):  # noqa: N801 — Vercel 이 이 이름�
 | 정적 파일 | `python3 -m http.server` 로도 열림 | Vercel CDN |
 | `api/` 함수 | `vercel dev` 가 있어야 동작 | 자동으로 엔드포인트가 됨 |
 | 환경 변수 | `.env.local` 파일 | 프로젝트 Settings 에 등록 |
-| 주소 | `http://localhost:3000` | `https://<프로젝트>.vercel.app` |
+| 주소 | `http://localhost:3000` | Pages `https://dicia-jhoh.github.io/codyssey-a1-3/` · Vercel `https://<프로젝트>.vercel.app` |
 
 가장 자주 걸리는 차이는 **환경 변수를 로컬에만 넣고 배포에는 안 넣는 것**입니다.
 로컬에서 잘 되던 AI 기능이 배포 후 500 을 뱉으면 여기부터 확인합니다.
@@ -440,19 +444,33 @@ function httpMessage(status) {
 
 ---
 
-## 배포 — GitHub ↔ Vercel
+## 배포
 
-절차는 다음과 같습니다.
+### 실제 배포 — GitHub Pages (정적)
+
+**https://dicia-jhoh.github.io/codyssey-a1-3/** — `main` 브랜치 루트를 그대로 서빙합니다.
+push 하면 자동 재배포되고, 빌드 상태는 저장소 **Settings → Pages** 에서 확인합니다.
+
+동작하는 것 / 안 하는 것을 분명히 적습니다.
+
+| | GitHub Pages | Vercel |
+|---|---|---|
+| 화면 3개(메인·목록·상세)·메뉴 이동 | ✅ | ✅ |
+| 반응형(모바일/데스크톱) | ✅ | ✅ |
+| `api/recommend.py` AI 큐레이션 | ❌ 404 → 화면에 오류 안내 | ✅ |
+| `api/track.py` 행동 로그 | ❌ 404(무시됨) | ✅ |
+
+Pages 는 **정적 파일만** 서빙합니다. `api/` 는 Python 서버리스 함수라 실행되지 않습니다.
+Netlify 도 마찬가지입니다 — Python 은 *빌드 단계*에서만 지원하고 Functions 런타임에는 없습니다.
+AI 기능까지 살리려면 아래 Vercel 절차로 함께 배포합니다.
+
+### AI 기능까지 — Vercel (서버리스)
 
 1. Vercel 에 GitHub 계정으로 로그인 → **Add New Project** → 이 저장소 선택
 2. Framework Preset = **Other** (프레임워크를 쓰지 않습니다)
 3. **Settings → Environment Variables** 에 `OPENAI_API_KEY` 등록 (Production·Preview 모두)
 4. **Deploy** → 발급된 `https://<프로젝트>.vercel.app` 로 접속
 5. `main` 에 push 할 때마다 자동 재배포
-
-> ⚠ **실제 연동 시 이 자리**에 배포 URL 이 들어갑니다. 이 저장소는 학습용 예시 답안이라
-> Vercel 프로젝트를 연결하지 않았습니다 — 위 절차대로 연결하면
-> `https://<프로젝트>.vercel.app` 이 발급되고, 아래 배포 확인 항목을 그대로 점검할 수 있습니다.
 > OpenAI 키도 마찬가지로 **실제 연동 시 이 자리**(Vercel 환경 변수)에 값을 넣습니다.
 
 ### 배포 후 확인할 것

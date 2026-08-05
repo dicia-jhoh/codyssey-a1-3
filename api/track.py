@@ -6,7 +6,7 @@
 저장을 어디에 하나 — Serverless 는 **호출 간 상태가 유지되지 않으므로** 함수 안 변수·파일에
 쌓을 수 없다(다음 요청은 다른 인스턴스에서 실행된다). 그래서 두 갈래로 내보낸다:
 
-  ① **구조화 로그** — 한 줄 JSON 으로 stdout 에 찍는다. Vercel 은 함수 로그를 수집하므로
+  ① **구조화 로그** — 한 줄 JSON 으로 stdout 에 찍는다. 서버 로그(journald)가 stdout 을 수집하므로
      이 자체가 조회 가능한 저장소가 된다. 의존성 0, 실패 지점 0.
   ② **외부 도구 웹훅**(선택) — `TRACK_WEBHOOK_URL` 이 설정돼 있으면 같은 이벤트를 그쪽으로도
      보낸다. Slack·노코드 자동화(Make·Zapier)·시트 적재 어디든 URL 만 바꾸면 붙는다.
@@ -56,7 +56,7 @@ def forward(event: dict) -> str:
         return f"forward-failed({exc})"
 
 
-class handler(BaseHTTPRequestHandler):  # noqa: N801 — Vercel 진입점 규약
+class handler(BaseHTTPRequestHandler):  # noqa: N801 — server.py 진입점 규약
     """POST /api/track — 본문 {"event": "ai_request", "detail": {...}}"""
 
     def do_POST(self) -> None:  # noqa: N802

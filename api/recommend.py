@@ -1,11 +1,11 @@
-"""Vercel Serverless Function — 취향 문장을 받아 카페 추천 문구를 만든다.
+"""API 함수 — 취향 문장을 받아 카페 추천 문구를 만든다.
 
-배치 규칙: Vercel 은 `api/` 폴더의 파일 하나를 엔드포인트 하나로 만든다.
-이 파일이 `api/recommend.py` 이므로 배포 후 주소는 **`/api/recommend`** 이고,
-프론트의 `fetch('/api/recommend')` 가 그대로 닿는다. 라우팅 설정을 따로 쓰지 않는다.
+주소 규칙: `api/` 폴더의 파일 하나가 엔드포인트 하나다. 이 파일이 `api/recommend.py` 이므로
+주소는 **`/api/recommend`** 이고, 프론트의 `fetch('/api/recommend')` 가 그대로 닿는다.
+연결은 `server.py` 의 `ROUTES` 표가 담당한다.
 
-진입점 규칙: 클래스 이름은 반드시 `handler` 이고 `BaseHTTPRequestHandler` 를 상속한다.
-Vercel 런타임이 이 이름을 찾아 요청마다 인스턴스를 만든다(우리가 서버를 띄우지 않는다).
+진입점 규칙: 클래스 이름은 `handler` 이고 `BaseHTTPRequestHandler` 를 상속한다.
+서버가 요청마다 이 클래스로 처리를 넘긴다 — 이 파일은 서버를 직접 띄우지 않는다.
 
 왜 서버가 필요한가 — **API 키 때문**이다. 브라우저 JavaScript 에서 AI API 를 직접 부르면
 키가 사용자에게 그대로 노출된다(개발자 도구에서 보인다). 키를 아는 순간 누구나 내 계정으로
@@ -21,9 +21,11 @@ import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler
 
-OPENAI_URL = "https://api.openai.com/v1/chat/completions"
-MODEL = "gpt-4o-mini"
-KEY_NAME = "OPENAI_API_KEY"  # 값이 아니라 **이름만** 코드에 둔다
+MODEL = "gemini-2.5-flash"
+# 모델 이름을 주소에 넣는 방식이라 f-string 으로 조립한다. `-latest` 같은 별칭 대신 버전을
+# 박은 이름을 쓴다 — 별칭은 뒤에서 모델이 바뀌어 응답 형식·품질이 예고 없이 달라진다.
+GEMINI_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent"
+KEY_NAME = "GEMINI_API_KEY"  # 값이 아니라 **이름만** 코드에 둔다
 
 MAX_WISH_LEN = 200  # 입력 상한 — 긴 문장은 토큰 비용만 늘리고 추천 품질을 올리지 않는다
 UPSTREAM_TIMEOUT = 10  # 프론트가 12초에 끊으므로 그보다 짧게 잡아 먼저 정리한다
@@ -52,28 +54,35 @@ def build_prompt(wish: str, cafes: list[dict]) -> str:
     )
 
 
-def call_openai(api_key: str, prompt: str) -> str:
-    """OpenAI Chat Completions 호출 → 답변 텍스트. 실패는 예외로 올린다."""
+def call_gemini(api_key: str, prompt: str) -> str:
+    """Gemini generateContent 호출 → 답변 텍스트. 실패는 예외로 올린다.
+
+    키는 `Authorization` 헤더가 아니라 **`x-goog-api-key`** 로 보낸다(Gemini 규약).
+    `thinkingBudget: 0` 은 내부 추론 단계를 끄는 설정이다 — 이 과업은 후보 목록에서 한 곳을
+    고르는 단순 작업이라 추론을 켜면 응답만 느려지고 결과는 같다.
+    """
     body = json.dumps(
         {
-            "model": MODEL,
-            "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.7,
-            "max_tokens": 400,  # 응답 길이를 묶어 요금과 대기시간을 예측 가능하게 만든다
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {
+                "temperature": 0.7,
+                "maxOutputTokens": 400,  # 응답 길이를 묶어 요금과 대기시간을 예측 가능하게 만든다
+                "thinkingConfig": {"thinkingBudget": 0},
+            },
         }
     ).encode("utf-8")
     request = urllib.request.Request(
-        OPENAI_URL,
+        GEMINI_URL,
         data=body,
-        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},
         method="POST",
     )
     with urllib.request.urlopen(request, timeout=UPSTREAM_TIMEOUT) as response:
         payload = json.loads(response.read().decode("utf-8"))
-    return payload["choices"][0]["message"]["content"].strip()
+    return payload["candidates"][0]["content"]["parts"][0]["text"].strip()
 
 
-class handler(BaseHTTPRequestHandler):  # noqa: N801 — Vercel 이 이 이름을 찾는다
+class handler(BaseHTTPRequestHandler):  # noqa: N801 — server.py 가 이 이름을 찾는다
     """POST /api/recommend — 본문 {"wish": "...", "cafes": [...]}"""
 
     def do_POST(self) -> None:  # noqa: N802 — BaseHTTPRequestHandler 규약
@@ -105,7 +114,7 @@ class handler(BaseHTTPRequestHandler):  # noqa: N801 — Vercel 이 이 이름�
             return
 
         try:
-            text = call_openai(api_key, build_prompt(wish, cafes))
+            text = call_gemini(api_key, build_prompt(wish, cafes))
         except urllib.error.HTTPError as exc:
             # 상류 상태코드를 그대로 넘긴다 — 프론트가 코드별로 다른 안내를 띄운다
             self._send(exc.code, {"error": f"AI API 오류(HTTP {exc.code})"})

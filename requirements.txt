@@ -1,10 +1,7 @@
-# Vercel Serverless Functions(Python) 이 설치할 패키지 목록.
+# 서버가 설치할 패키지 목록.
 #
-# 지금은 비어 있습니다 — api/recommend.py 가 표준 라이브러리(urllib·json·http.server)만
+# 지금은 비어 있습니다 — api/ 와 server.py 가 표준 라이브러리(urllib·json·http.server)만
 # 쓰기 때문입니다. 의존성이 없으면 배포가 빠르고, 패키지 취약점·버전 충돌도 생기지 않습니다.
 #
-# 파일 자체는 남겨 둡니다: Vercel 이 이 파일을 보고 Python 런타임을 선택하고,
+# 파일 자체는 남겨 둡니다: 배포 스크립트가 이 파일을 보고 가상환경을 준비하며,
 # 나중에 패키지가 필요해지면 여기 한 줄만 추가하면 됩니다.
-#
-# 예) OpenAI 공식 SDK 를 쓰기로 하면:
-# openai==1.51.0

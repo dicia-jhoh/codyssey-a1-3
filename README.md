@@ -1,20 +1,20 @@
 # BrewFinder — AI 카페 큐레이션 웹 서비스 (A1-3)
 
-**배포 URL — https://dicia-jhoh.github.io/codyssey-a1-3/**
-(메인 → 목록 → 상세 3개 화면과 상단 메뉴 이동이 이 주소에서 모두 동작합니다.
-AI 큐레이션은 서버리스 런타임이 필요해 이 정적 배포에서는 안내 메시지가 뜹니다 — 아래 [배포](#배포) 참조.)
+**배포 URL — http://129.225.184.224:8037/**
+(메인 → 목록 → 상세 3개 화면과 상단 메뉴 이동, **AI 큐레이션까지 이 주소에서 모두 동작합니다.**
+정적 파일과 API 를 한 서버가 함께 서빙합니다 — 구성은 아래 [배포](#배포) 참조.)
 
 처음 온 동네에서 **분위기 좋은 카페를 3분 안에 찾아 예약**하는 웹 서비스입니다.
-순수 HTML/CSS/JavaScript 로 만든 화면 3개와, Vercel Serverless Functions(Python) 로 만든
-AI 추천 엔드포인트 하나로 이루어져 있습니다.
+순수 HTML/CSS/JavaScript 로 만든 화면 3개와, Python 으로 만든 AI 추천 엔드포인트 하나로
+이루어져 있습니다. 정적 파일과 API 를 `server.py` 한 프로세스가 함께 서빙합니다.
 
 | 항목 | 값 |
 |---|---|
 | 프론트엔드 | 순수 HTML · CSS · JavaScript (프레임워크 없음) |
-| 백엔드 | Vercel Serverless Functions — Python (`api/recommend.py`) |
-| AI 기능 | 취향 문장 → 카페 큐레이션 (OpenAI Chat Completions) |
-| 배포 | GitHub Pages(정적, 운영 URL) + Vercel(서버리스 함수) — 아래 [배포](#배포) 참조 |
-| 환경 변수 | `OPENAI_API_KEY` (서버 전용 — 브라우저에 내려가지 않음) |
+| 백엔드 | Python 표준 라이브러리 (`api/recommend.py` · `server.py`) — 프레임워크 없음 |
+| AI 기능 | 취향 문장 → 카페 큐레이션 (Google Gemini `generateContent`) |
+| 배포 | OCI 클라우드 VM 상시 서빙(systemd) — 아래 [배포](#배포) 참조 |
+| 환경 변수 | `GEMINI_API_KEY` (서버 전용 — 브라우저에 내려가지 않음) |
 
 ---
 
@@ -59,7 +59,7 @@ BrewFinder 는 "지금 내 기분"을 한 문장으로 받아 **한 곳을 골�
 | | 내용 |
 |---|---|
 | **입력** | 사용자가 쓴 취향 문장 1개 (예: "노트북 켜고 두 시간 조용히 있고 싶어요") + 현재 카페 목록 |
-| **처리** | `POST /api/recommend` → OpenAI 에 "이 목록 안에서만 고르라"는 제약과 함께 질의 |
+| **처리** | `POST /api/recommend` → Gemini 에 "이 목록 안에서만 고르라"는 제약과 함께 질의 |
 | **출력** | 추천 1곳 + 이유 2~3문장 + 차선책 1곳 |
 | **사용자 가치** | 후기를 읽지 않고도 **한 곳으로 좁혀진다**. 비교 시간을 몇 분에서 몇 초로 줄인다 |
 
@@ -78,21 +78,24 @@ python3 -m http.server 8000
 # 브라우저에서 http://localhost:8000 접속
 ```
 
-### 2) AI 기능까지 (Vercel CLI)
+### 2) AI 기능까지 (`server.py`)
 
-`vercel dev` 는 `api/` 폴더를 실제 배포와 같은 방식으로 띄워 줍니다.
+`python3 -m http.server` 는 **파일만** 내려줍니다 — `api/` 는 실행되지 않아 AI 기능이 404 가
+됩니다. `server.py` 는 정적 파일과 API 를 함께 서빙하므로 배포와 같은 상태로 확인할 수 있습니다.
 
 ```bash
-npm i -g vercel
-cp .env.example .env.local     # 값을 실제 키로 채웁니다 (.gitignore 에 있어 커밋되지 않습니다)
-vercel dev
+export GEMINI_API_KEY=발급받은_키   # 또는 아래 .env 파일 방식
+python3 server.py                  # 기본 8000 번 포트
+# 브라우저에서 http://localhost:8000 접속
 ```
+
+설치할 패키지가 없습니다(`requirements.txt` 가 비어 있는 이유). Python 3.9 이상이면 됩니다.
 
 ### 3) 환경 변수
 
 | 이름 | 어디에 설정하나 | 비고 |
 |---|---|---|
-| `OPENAI_API_KEY` | 로컬은 `.env.local`, 배포는 Vercel 프로젝트 Settings → Environment Variables | **서버에서만** 읽습니다. 브라우저 번들에 들어가지 않습니다 |
+| `GEMINI_API_KEY` | 로컬은 셸 환경변수, 배포는 서버의 `.env.deploy` 파일(권한 600) | **서버에서만** 읽습니다. 브라우저에 내려가지 않습니다 |
 | `TRACK_WEBHOOK_URL` | 위와 같음 (선택) | 사용 이벤트를 외부 도구로 보낼 때만. 없으면 로그만 남깁니다 |
 
 ---
@@ -110,13 +113,13 @@ codyssey-a1-3/
 │   ├── data.js         카페 데이터(B2-1 시안 계승)
 │   └── app.js          렌더·검색·필터·fetch·오류 처리·테마
 ├── api/
-│   ├── recommend.py    Vercel Serverless Function (POST /api/recommend) — AI 큐레이션
-│   └── track.py        Vercel Serverless Function (POST /api/track) — 사용 이벤트 수집
+│   ├── recommend.py    API 함수 (POST /api/recommend) — AI 큐레이션
+│   └── track.py        API 함수 (POST /api/track) — 사용 이벤트 수집
 ├── images/             화면 스크린샷(모바일·데스크톱·다크) — 자동 캡처
 ├── requirements.txt    Python 런타임 선택 + 패키지 목록(현재 표준 라이브러리만)
-├── vercel.json         함수 런타임·최대 실행 시간
+├── server.py           진입점 — 정적 파일 + api/ 라우팅
 ├── .env.example        키 형식만 공유(값은 자리표시자)
-└── .gitignore          .env · .vercel 제외
+└── .gitignore          .env 제외
 ```
 
 ---
@@ -150,7 +153,7 @@ codyssey-a1-3/
 ② fetch('/api/recommend', {method:'POST', body: JSON})  ← 12초 타이머 시작
    ↓
 [서버] api/recommend.py  handler.do_POST()
-③ 입력을 다시 검증 → 환경변수에서 키를 읽음 → OpenAI 호출
+③ 입력을 다시 검증 → 환경변수에서 키를 읽음 → Gemini 호출
    ↓
 ④ {"recommendation": "..."} 로 응답 (실패면 {"error": "..."} + 상태코드)
    ↓
@@ -161,25 +164,32 @@ codyssey-a1-3/
 넣어 목록 밖 추천을 막습니다 — 없는 가게를 지어내면 서비스가 거짓말을 하게 됩니다.
 
 ```python
-def call_openai(api_key: str, prompt: str) -> str:
-    """OpenAI Chat Completions 호출 → 답변 텍스트. 실패는 예외로 올린다."""
+def call_gemini(api_key: str, prompt: str) -> str:
+    """Gemini generateContent 호출 → 답변 텍스트. 실패는 예외로 올린다.
+
+    키는 `Authorization` 헤더가 아니라 **`x-goog-api-key`** 로 보낸다(Gemini 규약).
+    `thinkingBudget: 0` 은 내부 추론 단계를 끄는 설정이다 — 이 과업은 후보 목록에서 한 곳을
+    고르는 단순 작업이라 추론을 켜면 응답만 느려지고 결과는 같다.
+    """
     body = json.dumps(
         {
-            "model": MODEL,
-            "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.7,
-            "max_tokens": 400,  # 응답 길이를 묶어 요금과 대기시간을 예측 가능하게 만든다
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {
+                "temperature": 0.7,
+                "maxOutputTokens": 400,  # 응답 길이를 묶어 요금과 대기시간을 예측 가능하게 만든다
+                "thinkingConfig": {"thinkingBudget": 0},
+            },
         }
     ).encode("utf-8")
     request = urllib.request.Request(
-        OPENAI_URL,
+        GEMINI_URL,
         data=body,
-        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},
         method="POST",
     )
     with urllib.request.urlopen(request, timeout=UPSTREAM_TIMEOUT) as response:
         payload = json.loads(response.read().decode("utf-8"))
-    return payload["choices"][0]["message"]["content"].strip()
+    return payload["candidates"][0]["content"]["parts"][0]["text"].strip()
 ```
 
 ⑤ 단계에서 응답을 화면에 넣는 코드입니다. 성공과 실패가 **같은 함수**를 쓰되 `is-error`
@@ -201,32 +211,35 @@ def call_openai(api_key: str, prompt: str) -> str:
 핵심은 **브라우저가 AI API 를 직접 부르지 않는다**는 점입니다. 우리 서버(`/api/recommend`)를
 부르고, 서버가 대신 AI 를 부릅니다. 이유는 아래 보안 절에 적었습니다.
 
-### Vercel Serverless Functions 란
+### 정적 파일과 API 를 한 서버가 함께 서빙한다
 
-**서버를 띄워 두지 않고 함수만 올려 두는 방식**입니다. 요청이 오면 그때 함수가 실행되고,
-끝나면 사라집니다. 우리가 관리할 서버·포트·프로세스가 없습니다.
+화면(HTML·CSS·JS)은 **파일**이라 그대로 내려주면 되지만, `api/recommend.py` 는 요청마다
+**실행**돼야 하는 프로그램입니다. 이 차이가 배포처를 고르는 기준이 됩니다.
 
-| | 전통적인 서버 | Serverless Function |
+| | 정적 호스팅(GitHub Pages 등) | 실행 가능한 서버(이 프로젝트) |
 |---|---|---|
-| 실행 | 항상 떠 있음 | 요청이 올 때만 실행 |
-| 비용 | 놀아도 과금 | 호출한 만큼 |
-| 상태 | 메모리에 유지 가능 | **호출 간 유지되지 않음** |
-| 이 프로젝트 | 해당 없음 | `api/recommend.py` 하나 |
+| HTML·CSS·JS | ✅ 내려줌 | ✅ 내려줌 |
+| `api/` 실행 | ❌ 불가 — 404/405 | ✅ 요청마다 실행 |
+| AI 큐레이션 | ❌ 동작 안 함 | ✅ 동작 |
 
-Vercel 의 규칙은 두 가지입니다. ① `api/` 폴더의 파일 하나가 엔드포인트 하나가 된다
-(`api/recommend.py` → `/api/recommend`) ② Python 은 `handler` 라는 이름의
-`BaseHTTPRequestHandler` 클래스를 진입점으로 찾는다.
+규칙은 두 가지입니다. ① `api/` 폴더의 파일 하나가 엔드포인트 하나다
+(`api/recommend.py` → `/api/recommend`) ② 진입점은 `handler` 라는 이름의
+`BaseHTTPRequestHandler` 클래스다.
 
 ```python
-class handler(BaseHTTPRequestHandler):  # noqa: N801 — Vercel 이 이 이름을 찾는다
+class handler(BaseHTTPRequestHandler):  # noqa: N801 — server.py 가 이 이름을 찾는다
     """POST /api/recommend — 본문 {"wish": "...", "cafes": [...]}"""
 
     def do_POST(self) -> None:
 ```
 
-"상태가 유지되지 않는다"는 성질 때문에 **함수 안에 캐시나 세션을 두지 않았습니다.** 다음 요청은
-다른 인스턴스에서 실행될 수 있어 저장해도 사라집니다. 저장이 필요해지면 외부 저장소
-(KV·DB)를 붙이는 것이 정석이고, 그 자리는 `do_POST` 의 응답 직전입니다.
+연결은 `server.py` 의 `ROUTES` 표 한 곳에서 합니다. 기능을 더할 때는 `api/` 에 파일을 만들고
+그 표에 한 줄을 넣으면 되고, **기능 코드는 서버를 띄우는 방법을 몰라도 됩니다.** 덕분에 배포처가
+바뀌어도 `api/` 는 손대지 않습니다 — 실제로 이 프로젝트도 진입점만 바꿔 옮겼습니다.
+
+**함수 안에 캐시나 세션을 두지 않았습니다.** 지금은 단일 프로세스라 메모리에 담아도 살아남지만,
+그렇게 만들면 나중에 프로세스를 여러 개로 늘리는 순간 사용자마다 다른 답을 보게 됩니다. 저장이
+필요해지면 외부 저장소(파일·DB)를 붙이는 것이 정석이고, 그 자리는 `do_POST` 의 응답 직전입니다.
 
 ### 환경 변수로 API 키를 관리해야 하는 이유
 
@@ -239,7 +252,7 @@ class handler(BaseHTTPRequestHandler):  # noqa: N801 — Vercel 이 이 이름�
 | 층 | 무엇을 | 코드/파일 |
 |---|---|---|
 | 1 | 키를 **서버에서만** 읽는다 | `api/recommend.py` 의 `os.environ.get(KEY_NAME)` |
-| 2 | 코드에는 **이름만** 둔다 | `KEY_NAME = "OPENAI_API_KEY"` — 값은 어디에도 없다 |
+| 2 | 코드에는 **이름만** 둔다 | `KEY_NAME = "GEMINI_API_KEY"` — 값은 어디에도 없다 |
 | 3 | `.env` 를 커밋에서 제외한다 | `.gitignore` 첫 줄. 형식은 `.env.example` 로만 공유 |
 
 ```python
@@ -257,12 +270,13 @@ class handler(BaseHTTPRequestHandler):  # noqa: N801 — Vercel 이 이 이름�
 
 ### 로컬 환경과 배포 환경의 차이
 
-| | 로컬 | 배포(Vercel) |
+| | 로컬 | 배포(OCI) |
 |---|---|---|
-| 정적 파일 | `python3 -m http.server` 로도 열림 | Vercel CDN |
-| `api/` 함수 | `vercel dev` 가 있어야 동작 | 자동으로 엔드포인트가 됨 |
-| 환경 변수 | `.env.local` 파일 | 프로젝트 Settings 에 등록 |
-| 주소 | `http://localhost:3000` | Pages `https://dicia-jhoh.github.io/codyssey-a1-3/` · Vercel `https://<프로젝트>.vercel.app` |
+| 실행 | `python3 server.py` | systemd 가 같은 명령을 상시 실행 |
+| 정적 파일 | 같은 프로세스가 서빙 | 같음 |
+| `api/` 함수 | 같은 프로세스가 서빙 | 같음 |
+| 환경 변수 | 셸에서 `export` | `.env.deploy` 파일(권한 600) |
+| 주소 | `http://localhost:8000` | `http://129.225.184.224:8037/` |
 
 가장 자주 걸리는 차이는 **환경 변수를 로컬에만 넣고 배포에는 안 넣는 것**입니다.
 로컬에서 잘 되던 AI 기능이 배포 후 500 을 뱉으면 여기부터 확인합니다.
@@ -403,7 +417,7 @@ function httpMessage(status) {
 {"error": "추천 대상 카페 목록이 비어 있습니다."} [HTTP 400]
 
 == POST 정상 요청(키 미설정 환경) ==
-{"error": "서버에 OPENAI_API_KEY 환경변수가 설정되지 않았습니다."} [HTTP 500]
+{"error": "서버에 GEMINI_API_KEY 환경변수가 설정되지 않았습니다."} [HTTP 500]
 
 == POST 깨진 JSON ==
 {"error": "요청 본문이 올바른 JSON 이 아닙니다."} [HTTP 400]
@@ -446,32 +460,53 @@ function httpMessage(status) {
 
 ## 배포
 
-### 실제 배포 — GitHub Pages (정적)
+### 실제 배포 — OCI 클라우드 VM (상시 서빙)
 
-**https://dicia-jhoh.github.io/codyssey-a1-3/** — `main` 브랜치 루트를 그대로 서빙합니다.
-push 하면 자동 재배포되고, 빌드 상태는 저장소 **Settings → Pages** 에서 확인합니다.
+**http://129.225.184.224:8037/** — Oracle Cloud Always Free VM 에서 `server.py` 가 systemd
+서비스로 상시 실행됩니다. 정적 파일과 `api/` 함수를 **한 프로세스가 함께** 서빙하므로 화면과
+AI 기능이 모두 같은 주소에서 동작합니다.
 
-동작하는 것 / 안 하는 것을 분명히 적습니다.
+왜 정적 호스팅(GitHub Pages)이 아닌가 — **`api/` 를 실행할 수 없기 때문입니다.**
+Pages 는 파일만 내려주므로 `POST /api/recommend` 가 405 를 돌려주고 AI 큐레이션이 죽습니다.
+브라우저에서 AI API 를 직접 부르면 해결되는 것처럼 보이지만, 그러면 **키가 그대로 노출**되어
+이 프로젝트가 지키려는 원칙(위 보안 절)을 정면으로 어깁니다. 그래서 실행 가능한 서버를 골랐습니다.
 
-| | GitHub Pages | Vercel |
+| | GitHub Pages | OCI VM (선택) |
 |---|---|---|
 | 화면 3개(메인·목록·상세)·메뉴 이동 | ✅ | ✅ |
 | 반응형(모바일/데스크톱) | ✅ | ✅ |
-| `api/recommend.py` AI 큐레이션 | ❌ 404 → 화면에 오류 안내 | ✅ |
-| `api/track.py` 행동 로그 | ❌ 404(무시됨) | ✅ |
+| `api/recommend.py` AI 큐레이션 | ❌ 405 | ✅ |
+| `api/track.py` 행동 로그 | ❌ 405 | ✅ |
+| 비용 | 무료 | 무료(Always Free 한도 내) |
+| HTTPS | 자동 | 미적용(도메인 없이 IP 직접 접속) |
 
-Pages 는 **정적 파일만** 서빙합니다. `api/` 는 Python 서버리스 함수라 실행되지 않습니다.
-Netlify 도 마찬가지입니다 — Python 은 *빌드 단계*에서만 지원하고 Functions 런타임에는 없습니다.
-AI 기능까지 살리려면 아래 Vercel 절차로 함께 배포합니다.
+Netlify 도 Pages 와 같습니다 — Python 은 *빌드 단계*에서만 지원하고 Functions 런타임에는
+없습니다. 그래서 후보에서 제외했습니다.
 
-### AI 기능까지 — Vercel (서버리스)
+### 서버 구성
 
-1. Vercel 에 GitHub 계정으로 로그인 → **Add New Project** → 이 저장소 선택
-2. Framework Preset = **Other** (프레임워크를 쓰지 않습니다)
-3. **Settings → Environment Variables** 에 `OPENAI_API_KEY` 등록 (Production·Preview 모두)
-4. **Deploy** → 발급된 `https://<프로젝트>.vercel.app` 로 접속
-5. `main` 에 push 할 때마다 자동 재배포
-> OpenAI 키도 마찬가지로 **실제 연동 시 이 자리**(Vercel 환경 변수)에 값을 넣습니다.
+```bash
+# 1) 코드 배치 (VM 안, ubuntu 사용자)
+git clone https://github.com/dicia-jhoh/codyssey-a1-3.git ~/codyssey-a1-3
+
+# 2) 키를 파일로 둔다 — 소유자만 읽게 권한을 조인다
+printf 'GEMINI_API_KEY=발급받은_키\n' > ~/codyssey-a1-3/.env.deploy
+chmod 600 ~/codyssey-a1-3/.env.deploy
+
+# 3) systemd 서비스로 등록 (부팅·오류 시 자동 재시작)
+sudo systemctl enable --now codyssey-a1-3
+```
+
+서비스 정의의 핵심 세 줄입니다.
+
+```ini
+EnvironmentFile=-/home/ubuntu/codyssey-a1-3/.env.deploy   # 키는 코드가 아니라 파일에서
+ExecStart=/usr/bin/python3 /home/ubuntu/codyssey-a1-3/server.py
+Restart=always                                            # 죽으면 다시 띄운다
+```
+
+`Environment=PORT=8037` 로 포트를 지정합니다. 방화벽은 **OCI 보안목록과 VM iptables 두 곳**을
+모두 열어야 합니다 — 한쪽만 열면 접속이 조용히 막힙니다(실제로 겪은 함정입니다).
 
 ### 배포 후 확인할 것
 
@@ -480,20 +515,20 @@ AI 기능까지 살리려면 아래 Vercel 절차로 함께 배포합니다.
 | 네비게이션 | 하단 4탭으로 3페이지를 오갈 수 있는가 |
 | 반응형 | 브라우저 폭을 줄여 카드가 2열 → 1열로 바뀌는가 |
 | AI 기능 | 취향 문장을 넣어 추천 문장이 나오는가 |
-| 엔드포인트 | `https://<프로젝트>.vercel.app/api/recommend` 를 브라우저로 열어 `{"status":"ok"}` 가 보이는가 |
+| 엔드포인트 | `http://129.225.184.224:8037/api/recommend` 를 브라우저로 열어 `{"status":"ok"}` 가 보이는가 |
 | 키 노출 | 개발자 도구 → Sources 에서 키 문자열이 **검색되지 않는가** |
 
-### 문제가 생기면 — 수정 후 재배포
+### 문제가 생기면
 
 | 증상 | 원인 | 조치 |
 |---|---|---|
-| AI 기능만 500 | 환경 변수 미등록 | Settings 에 키 등록 후 **Redeploy**(변수는 재배포해야 반영됨) |
-| `/api/recommend` 404 | 파일 위치·이름 | `api/` 폴더 안에 있는지, 클래스 이름이 `handler` 인지 |
-| 화면은 뜨는데 CSS 없음 | 경로 대소문자 | Vercel 은 대소문자를 구분합니다(`css/Style.css` ≠ `css/style.css`) |
-| 로컬은 되는데 배포는 안 됨 | 환경 차이 | 위 로컬 vs 배포 표부터 확인 |
+| AI 기능만 500 | 키 미설정 | `.env.deploy` 확인 후 `sudo systemctl restart codyssey-a1-3` |
+| `/api/recommend` 404 | 라우팅 누락 | `server.py` 의 `ROUTES` 에 주소가 있는지 |
+| 접속 자체가 안 됨 | 방화벽 | 보안목록·iptables **양쪽**에 포트가 열렸는지 |
+| 화면은 뜨는데 CSS 없음 | 경로 대소문자 | 리눅스 파일시스템은 대소문자를 구분합니다(`css/Style.css` ≠ `css/style.css`) |
 
-수정 → 커밋 → push 하면 Vercel 이 자동으로 다시 빌드합니다. 롤백은 Deployments 목록에서
-이전 배포를 **Promote to Production** 하면 됩니다.
+로그는 `journalctl -u codyssey-a1-3 -n 50` 으로 봅니다. 코드를 고치면
+`git pull && sudo systemctl restart codyssey-a1-3` 로 반영합니다.
 
 ---
 
@@ -503,12 +538,12 @@ AI 기능까지 살리려면 아래 Vercel 절차로 함께 배포합니다.
 |---|---|---|
 | 카드 목록 렌더 | "카페 배열을 카드 목록으로 그리는 함수" | 생성된 코드가 `innerHTML` 에 데이터를 끼워 넣어 **XSS 여지**가 있었다. `textContent` + `createElement` 로 바꿨다 |
 | fetch 호출 | "fetch 로 POST 하고 결과를 화면에 표시" | 타임아웃이 없었다. `AbortController` 와 `finally` 정리를 추가했다 |
-| Vercel Python 함수 | "Vercel Python serverless 예제" | 클래스 이름이 `Handler` 로 생성돼 **404** 가 났다. Vercel 규약은 소문자 `handler` 다 |
+| Python API 함수 | "python BaseHTTPRequestHandler 예제" | 클래스 이름이 `Handler` 로 생성돼 **404** 가 났다. 이 프로젝트 규약은 소문자 `handler` 다 |
 | 다크 모드 | "다크 모드 토글" | 색을 규칙마다 다시 선언해 CSS 가 두 배가 됐다. 변수만 갈아 끼우는 방식으로 바꿨다 |
 
 **오류를 스스로 설명할 수 있어야 하는 이유**를 여기서 겪었습니다. 세 번째 항목(`Handler` →
 `handler`)은 도구가 만든 코드가 문법적으로 완벽했기 때문에 에러 메시지가 없었고, 404 만 떴습니다.
-"Vercel 이 진입점을 이름으로 찾는다"는 구조를 모르면 검색어조차 만들 수 없습니다.
+"진입점을 클래스 이름으로 찾는다"는 구조를 모르면 검색어조차 만들 수 없습니다.
 
 ---
 
@@ -517,7 +552,7 @@ AI 기능까지 살리려면 아래 Vercel 절차로 함께 배포합니다.
 | 제약 | 어떻게 지켰나 |
 |---|---|
 | 프론트엔드는 순수 HTML/CSS/JS | 프레임워크·번들러·CDN 스크립트 0개. `js/` 는 파일 2개 |
-| 백엔드는 Vercel Serverless Functions(Python) | `api/recommend.py` — 표준 라이브러리만 사용 |
+| 백엔드는 Python API 함수 | `api/recommend.py` · `server.py` — 표준 라이브러리만 사용 |
 | AI 기능 1개 이상 | 취향 문장 → 카페 큐레이션 |
 | 페이지/섹션 3개 이상 | 메인·목록·상세 |
 | 실패 안내 1개 이상 | 빈 입력·API 오류·타임아웃 **3개 모두** |
@@ -575,7 +610,7 @@ body.dark {
    ↓  js/app.js  track(event, detail)      기다리지 않는다(await 없음)
 [서버]  api/track.py  handler.do_POST()
    ├─ 허용 목록 검사 — 오타가 새 지표를 만들지 못하게 한다
-   ├─ ① 구조화 로그 한 줄(JSON) → Vercel 함수 로그가 곧 조회 가능한 저장소
+   ├─ ① 구조화 로그 한 줄(JSON) → journald 가 곧 조회 가능한 저장소
    └─ ② TRACK_WEBHOOK_URL 이 있으면 같은 이벤트를 외부 도구로 전달
         (Slack · Make/Zapier 같은 노코드 자동화 · 시트 적재 — URL 만 바꾸면 붙는다)
 ```
@@ -624,16 +659,16 @@ ALLOWED_EVENTS = {
 | 방식 | 어떻게 | 언제 맞나 | 대가 |
 |---|---|---|---|
 | A. 파일 분리 | `api/summarize.py`·`api/plan.py` … 기능마다 파일 하나 | 기능 2~5개 | 프롬프트·호출·오류 처리가 파일마다 복제된다 |
-| B. 공통 모듈 + 파일 분리 | 위 + `api/_llm.py` 에 `call_openai`·오류 매핑을 모은다 | 기능 3개 이상 | 없음 — 사실상 A 의 상위 호환 |
+| B. 공통 모듈 + 파일 분리 | 위 + `api/_llm.py` 에 `call_gemini`·오류 매핑을 모은다 | 기능 3개 이상 | 없음 — 사실상 A 의 상위 호환 |
 | C. 단일 엔드포인트 + 타입 파라미터 | `/api/ai` 하나가 `{"task": "summarize"}` 로 분기 | 기능이 많고 서로 매우 비슷할 때 | 한 함수가 커지고, 한 기능의 배포 실패가 전부를 막는다 |
 
-**B 를 택하겠습니다.** 지금 코드에서 재사용 대상이 이미 드러나 있습니다 — `call_openai`,
+**B 를 택하겠습니다.** 지금 코드에서 재사용 대상이 이미 드러나 있습니다 — `call_gemini`,
 `_send`, 상태코드 매핑은 기능이 늘어도 똑같습니다. 반면 프롬프트와 입력 검증은 기능마다
 다르므로 각 파일에 남깁니다. 옮길 범위는 명확합니다.
 
 ```text
 api/
-├── _llm.py         call_openai() · UPSTREAM_TIMEOUT · KEY_NAME   (공통)
+├── _llm.py         call_gemini() · UPSTREAM_TIMEOUT · KEY_NAME   (공통)
 ├── _http.py        send_json() · 상태코드 → 메시지               (공통)
 ├── recommend.py    build_prompt() + 입력 검증 + handler          (기능별)
 └── summarize.py    build_prompt() + 입력 검증 + handler          (기능별)
@@ -670,7 +705,7 @@ api/
 | HTML 3개 → 컴포넌트 + 라우터 | `api/recommend.py`·`api/track.py` (그대로) |
 | `renderCards`/`renderDetail` → 컴포넌트 | `fetch('/api/…')` 계약(요청·응답 형식) |
 | CSS → CSS Modules 등(선택) | 색 변수·반응형 규칙 |
-| 빌드 설정 추가 | Vercel 배포 방식(프리셋만 바꿈) |
+| 빌드 설정 추가 | 배포 방식(진입점만 바꿈) |
 
 **백엔드가 전혀 안 바뀌는 것**이 핵심입니다. 프론트와 서버를 JSON 계약으로 갈라 두었기
 때문입니다 — 이 경계가 없으면 프레임워크 교체가 전면 재작성이 됩니다.
@@ -697,8 +732,8 @@ api/
 | 최신 브라우저 | Chrome·Edge·Safari 어느 것이든 됩니다 |
 | Python 3.10 이상 | [python.org](https://www.python.org/downloads/) — 화면만 볼 때도 간이 서버로 씁니다 |
 | Git | [git-scm.com](https://git-scm.com/) |
-| Node.js (선택) | AI 기능까지 로컬에서 볼 때만 필요합니다(`vercel` CLI 설치용) |
-| OpenAI API 키 (선택) | AI 기능을 실제로 호출할 때만 필요합니다 |
+
+| Gemini API 키 (선택) | AI 기능을 실제로 호출할 때만 필요합니다(Google AI Studio 에서 무료 발급) |
 
 ---
 
@@ -737,9 +772,9 @@ api/
 5. **AI 기능을 켭니다.** 키가 있다면 아래를 실행합니다.
    ```bash
    cp .env.example .env.local   # 값을 실제 키로 채웁니다
-   npm i -g vercel && vercel dev
+   GEMINI_API_KEY=키 python3 server.py
    ```
 6. **실패 경로를 일부러 만들어 봅니다.** 빈칸으로 「추천받기」 → 안내 문구 확인.
    키를 지운 채 요청 → 500 안내 확인.
-7. **배포합니다.** 위 배포 절차대로 Vercel 에 연결하고, 환경 변수를 등록한 뒤 배포 URL 에서
+7. **배포합니다.** 위 배포 절차대로 서버에 올리고, 키 파일을 둔 뒤 배포 URL 에서
    5번을 다시 확인합니다.
